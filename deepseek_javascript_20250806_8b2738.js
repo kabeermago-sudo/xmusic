@@ -274,6 +274,61 @@ function recordEvent(type, data) {
     });
 }
 
+// Check for existing gamepads on page load
+function checkForGamepads() {
+    const gamepads = navigator.getGamepads();
+    for (let i = 0; i < gamepads.length; i++) {
+        if (gamepads[i]) {
+            gamepad = gamepads[i];
+            document.getElementById('status').textContent = `Gamepad connected: ${gamepad.id}`;
+            requestAnimationFrame(pollGamepad);
+            return;
+        }
+    }
+    // If no gamepad found, check again in 1 second
+    setTimeout(checkForGamepads, 1000);
+}
+
+// Start checking for gamepads when page loads
+window.addEventListener('load', () => {
+    checkForGamepads();
+});
+
+// Also check when user clicks start audio (common trigger point)
+document.getElementById('start-audio').addEventListener('click', () => {
+    if (!gamepad) {
+        checkForGamepads();
+    }
+});
+
+// Manual gamepad detection button
+document.getElementById('detect-gamepad').addEventListener('click', () => {
+    const gamepads = navigator.getGamepads();
+    let found = false;
+    let debugInfo = `Checking ${gamepads.length} gamepad slots: `;
+    
+    for (let i = 0; i < gamepads.length; i++) {
+        if (gamepads[i]) {
+            gamepad = gamepads[i];
+            document.getElementById('status').textContent = `Gamepad connected: ${gamepad.id}`;
+            debugInfo += `[${i}] ${gamepads[i].id} `;
+            if (!pollGamepad.running) {
+                requestAnimationFrame(pollGamepad);
+            }
+            found = true;
+            break;
+        } else {
+            debugInfo += `[${i}] empty `;
+        }
+    }
+    
+    document.getElementById('gamepad-debug').textContent = debugInfo;
+    
+    if (!found) {
+        document.getElementById('status').textContent = 'No gamepad detected. Make sure it\'s connected and press any button on it.';
+    }
+});
+
 // Gamepad connection handling
 window.addEventListener("gamepadconnected", (e) => {
     gamepad = e.gamepad;
