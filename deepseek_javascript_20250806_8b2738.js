@@ -6,6 +6,11 @@ let recordingStartTime = 0;
 let loopEvents = [];
 let currentChord = '';
 let currentDetune = 0;
+let audioInitialized = false;
+
+// Button state tracking for debouncing
+let buttonStates = {};
+let lastButtonStates = {};
 
 // Audio elements
 let drumPlayers;
@@ -14,12 +19,32 @@ let loopPart;
 let recorder;
 let recordedBuffer;
 
+// Visual feedback elements
+let currentInstrumentDisplay = null;
+
 // Initialize audio context on user interaction
 document.getElementById('start-audio').addEventListener('click', async () => {
-    await Tone.start();
-    console.log('Audio is ready');
-    initAudio();
-    document.getElementById('start-audio').disabled = true;
+    try {
+        await Tone.start();
+        console.log('Audio is ready');
+        initAudio();
+        audioInitialized = true;
+        document.getElementById('start-audio').disabled = true;
+        document.getElementById('start-audio').textContent = 'Audio Ready ✓';
+        document.getElementById('start-audio').style.backgroundColor = '#28a745';
+        
+        // Show ready status
+        document.getElementById('status').innerHTML = `
+            <div style="color: #28a745; font-weight: bold;">✓ Controller detected and audio ready!</div>
+            <div style="font-size: 14px; margin-top: 5px;">Press controller buttons to play instruments</div>
+        `;
+    } catch (error) {
+        console.error('Audio initialization failed:', error);
+        document.getElementById('status').innerHTML = `
+            <div style="color: #dc3545; font-weight: bold;">⚠ Audio initialization failed</div>
+            <div style="font-size: 14px;">Please try again</div>
+        `;
+    }
 });
 
 // Download loop button
@@ -81,6 +106,19 @@ function pollGamepad() {
     
     if (!gamepad) return;
     
+    // Update button states for debouncing
+    lastButtonStates = {...buttonStates};
+    buttonStates = {};
+    for (let i = 0; i < gamepad.buttons.length; i++) {
+        buttonStates[i] = gamepad.buttons[i].pressed;
+    }
+    
+    // Only process if audio is initialized
+    if (!audioInitialized) {
+        requestAnimationFrame(pollGamepad);
+        return;
+    }
+    
     checkModeSwitch();
     
     if (isDrumMode) {
@@ -95,33 +133,95 @@ function pollGamepad() {
     requestAnimationFrame(pollGamepad);
 }
 
+// Helper function to check if button was just pressed (not held)
+function wasButtonJustPressed(buttonIndex) {
+    return buttonStates[buttonIndex] && !lastButtonStates[buttonIndex];
+}
+
 function checkModeSwitch() {
     // Start button (button 9) toggles mode
-    if (gamepad.buttons[9].pressed) {
+    if (wasButtonJustPressed(9)) {
         isDrumMode = !isDrumMode;
-        document.getElementById('mode-display').textContent = `Mode: ${isDrumMode ? 'Drum' : 'Chord'}`;
-        document.getElementById('chord-display').textContent = '';
-        // Debounce
-        setTimeout(() => {}, 200);
+        const modeText = isDrumMode ? 'Drum Kit' : 'Chord Synth';
+        const modeIndicator = isDrumMode ? '<span class="mode-indicator drum-mode"></span>' : '<span class="mode-indicator chord-mode"></span>';
+        
+        document.getElementById('mode-display').innerHTML = `Mode: ${modeText} ${modeIndicator}`;
+        document.getElementById('mode-display').style.backgroundColor = isDrumMode ? '#ff6b6b' : '#4ecdc4';
+        document.getElementById('chord-display').textContent = isDrumMode ? 'Press buttons to play drums!' : 'Press buttons to play chords!';
+        
+        // Show mode change feedback
+        showInstrumentFeedback(`🎵 Switched to ${modeText} mode`, 1500);
     }
 }
 
 function handleDrumMode() {
     // Left bumper (button 4) - kick
-    if (gamepad.buttons[4].pressed) {
+    if (wasButtonJustPressed(4)) {
         drumPlayers.player('kick').start();
         recordEvent('drum', { sound: 'kick' });
+        showInstrumentFeedback('🥁 KICK', 500);
     }
     
     // Right bumper (button 5) - snare
-    if (gamepad.buttons[5].pressed) {
+    if (wasButtonJustPressed(5)) {
         drumPlayers.player('snare').start();
         recordEvent('drum', { sound: 'snare' });
+        showInstrumentFeedback('🥁 SNARE', 500);
+    }
+    
+    // Add more drum sounds for better experience
+    // A button (button 0) - hi-hat
+    if (wasButtonJustPressed(0)) {
+        // Create a simple hi-hat sound using synth
+        const hihat = new Tone.NoiseSynth({
+            noise: { type: 'white' },
+            envelope: { attack: 0.001, decay: 0.1, sustain: 0 }
+        }).toDestination();
+        hihat.triggerAttackRelease('8n');
+        showInstrumentFeedback('🎵 HI-HAT', 500);
+        recordEvent('drum', { sound: 'hihat' });
+    }
+    
+    // B button (button 1) - crash
+    if (wasButtonJustPressed(1)) {
+        const crash = new Tone.NoiseSynth({
+            noise: { type: 'pink' },
+            envelope: { attack: 0.01, decay: 0.5, sustain: 0.1, release: 1 }
+        }).toDestination();
+        crash.triggerAttackRelease('2n');
+        showInstrumentFeedback('💥 CRASH', 800);
+        recordEvent('drum', { sound: 'crash' });
     }
 }
 
 function handleChordMode() {
-    // Determine chord quality based on bumpers and triggers
+    // Check for any button press to determine chord
+    let buttonPressed = false;
+    let rootNote = '';
+    let chordFunction = '';
+    
+    // Check D-Pad and A/B/X/Y buttons for root notes
+    if (wasButtonJustPressed(13)) { // D-Pad Down - I
+        rootNote = 'C'; chordFunction = 'I'; buttonPressed = true;
+    } else if (wasButtonJustPressed(14)) { // D-Pad Left - ii
+        rootNote = 'D'; chordFunction = 'ii'; buttonPressed = true;
+    } else if (wasButtonJustPressed(12)) { // D-Pad Up - iii
+        rootNote = 'E'; chordFunction = 'iii'; buttonPressed = true;
+    } else if (wasButtonJustPressed(15)) { // D-Pad Right - IV
+        rootNote = 'F'; chordFunction = 'IV'; buttonPressed = true;
+    } else if (wasButtonJustPressed(0)) { // A - V
+        rootNote = 'G'; chordFunction = 'V'; buttonPressed = true;
+    } else if (wasButtonJustPressed(1)) { // B - vi
+        rootNote = 'A'; chordFunction = 'vi'; buttonPressed = true;
+    } else if (wasButtonJustPressed(2)) { // X - vii°
+        rootNote = 'B'; chordFunction = 'vii°'; buttonPressed = true;
+    } else if (wasButtonJustPressed(3)) { // Y - Additional chord
+        rootNote = 'F#'; chordFunction = 'bVII'; buttonPressed = true;
+    }
+    
+    if (!buttonPressed) return;
+    
+    // Determine chord quality based on bumpers and triggers (current state)
     let chordQuality = '';
     let chordName = '';
     
@@ -142,47 +242,21 @@ function handleChordMode() {
         chordName = 'Major';
     }
     
-    // Determine root note based on D-Pad and A/B/X/Y buttons
-    let rootNote = '';
-    let chordFunction = '';
+    const chordNotes = getChordNotes(rootNote, chordQuality);
+    synth.triggerAttackRelease(chordNotes, '4n');
     
-    if (gamepad.buttons[13].pressed) { // D-Pad Down - I
-        rootNote = 'C';
-        chordFunction = 'I';
-    } else if (gamepad.buttons[14].pressed) { // D-Pad Left - ii
-        rootNote = 'D';
-        chordFunction = 'ii';
-    } else if (gamepad.buttons[12].pressed) { // D-Pad Up - iii
-        rootNote = 'E';
-        chordFunction = 'iii';
-    } else if (gamepad.buttons[15].pressed) { // D-Pad Right - IV
-        rootNote = 'F';
-        chordFunction = 'IV';
-    } else if (gamepad.buttons[0].pressed) { // A - V
-        rootNote = 'G';
-        chordFunction = 'V';
-    } else if (gamepad.buttons[1].pressed) { // B - vi
-        rootNote = 'A';
-        chordFunction = 'vi';
-    } else if (gamepad.buttons[2].pressed) { // X - vii°
-        rootNote = 'B';
-        chordFunction = 'vii°';
-    }
+    currentChord = `${rootNote} ${chordName} (${chordFunction})`;
+    document.getElementById('chord-display').textContent = currentChord;
     
-    if (rootNote) {
-        const chordNotes = getChordNotes(rootNote, chordQuality);
-        synth.triggerAttackRelease(chordNotes, '8n');
-        
-        currentChord = `${chordFunction} (${chordName})`;
-        document.getElementById('chord-display').textContent = currentChord;
-        
-        recordEvent('chord', {
-            notes: chordNotes,
-            duration: '8n',
-            velocity: 0.8,
-            chord: currentChord
-        });
-    }
+    // Show visual feedback
+    showInstrumentFeedback(`🎹 ${currentChord}`, 1000);
+    
+    recordEvent('chord', {
+        notes: chordNotes,
+        duration: '4n',
+        velocity: 0.8,
+        chord: currentChord
+    });
 }
 
 function getChordNotes(root, quality) {
@@ -225,23 +299,89 @@ function handlePitchModulation() {
 
 function handleLoopRecording() {
     // Back button (button 8) toggles recording
-    if (gamepad.buttons[8].pressed) {
+    if (wasButtonJustPressed(8)) {
         if (!isRecording) {
             startRecording();
         } else {
             stopRecording();
         }
-        // Debounce
-        setTimeout(() => {}, 200);
     }
+}
+
+// Visual feedback function
+function showInstrumentFeedback(text, duration = 1000) {
+    // Remove existing feedback
+    if (currentInstrumentDisplay) {
+        currentInstrumentDisplay.remove();
+    }
+    
+    // Create new feedback element
+    currentInstrumentDisplay = document.createElement('div');
+    currentInstrumentDisplay.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px 40px;
+        border-radius: 15px;
+        font-size: 28px;
+        font-weight: bold;
+        text-align: center;
+        z-index: 1000;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        animation: feedbackPulse 0.3s ease-out;
+        pointer-events: none;
+    `;
+    
+    // Add CSS animation if not already added
+    if (!document.getElementById('feedback-styles')) {
+        const style = document.createElement('style');
+        style.id = 'feedback-styles';
+        style.textContent = `
+            @keyframes feedbackPulse {
+                0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+                50% { transform: translate(-50%, -50%) scale(1.1); opacity: 1; }
+                100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            }
+            @keyframes feedbackFadeOut {
+                0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    currentInstrumentDisplay.textContent = text;
+    document.body.appendChild(currentInstrumentDisplay);
+    
+    // Remove after duration
+    setTimeout(() => {
+        if (currentInstrumentDisplay) {
+            currentInstrumentDisplay.style.animation = 'feedbackFadeOut 0.3s ease-in forwards';
+            setTimeout(() => {
+                if (currentInstrumentDisplay) {
+                    currentInstrumentDisplay.remove();
+                    currentInstrumentDisplay = null;
+                }
+            }, 300);
+        }
+    }, duration);
 }
 
 function startRecording() {
     isRecording = true;
     recordingStartTime = Tone.now();
     loopEvents = [];
-    document.getElementById('recording-status').textContent = 'Recording...';
+    document.getElementById('recording-status').innerHTML = `
+        <div style="color: #ff4757; font-weight: bold;">🔴 Recording...</div>
+        <div style="font-size: 14px;">Press BACK again to stop</div>
+    `;
     document.getElementById('download-loop').disabled = true;
+    
+    // Show recording feedback
+    showInstrumentFeedback('🔴 Recording Started', 1500);
     
     // Start the recorder
     recorder.start();
@@ -249,7 +389,6 @@ function startRecording() {
 
 async function stopRecording() {
     isRecording = false;
-    document.getElementById('recording-status').textContent = 'Recording stopped';
     
     // Stop the recorder and get the buffer
     recordedBuffer = await recorder.stop();
@@ -260,6 +399,17 @@ async function stopRecording() {
         loopPart.add(loopEvents);
         loopPart.start(0);
         document.getElementById('download-loop').disabled = false;
+        document.getElementById('recording-status').innerHTML = `
+            <div style="color: #28a745; font-weight: bold;">✅ Recording saved!</div>
+            <div style="font-size: 14px;">${loopEvents.length} events recorded</div>
+        `;
+        showInstrumentFeedback(`✅ Recording Saved (${loopEvents.length} events)`, 2000);
+    } else {
+        document.getElementById('recording-status').innerHTML = `
+            <div style="color: #ffa500; font-weight: bold;">⚠ No events recorded</div>
+            <div style="font-size: 14px;">Play some instruments while recording</div>
+        `;
+        showInstrumentFeedback('⚠ No events recorded', 1500);
     }
 }
 
@@ -277,11 +427,20 @@ function recordEvent(type, data) {
 // Gamepad connection handling
 window.addEventListener("gamepadconnected", (e) => {
     gamepad = e.gamepad;
-    document.getElementById('status').textContent = `Gamepad connected: ${gamepad.id}`;
+    document.getElementById('status').innerHTML = `
+        <div style="color: #28a745; font-weight: bold;">🎮 Controller connected!</div>
+        <div style="font-size: 14px; margin-top: 5px;">${gamepad.id}</div>
+        <div style="font-size: 14px; margin-top: 5px;">Click "Start Audio" to begin playing</div>
+    `;
+    showInstrumentFeedback('🎮 Controller Connected!', 2000);
     requestAnimationFrame(pollGamepad);
 });
 
 window.addEventListener("gamepaddisconnected", (e) => {
-    document.getElementById('status').textContent = 'Gamepad disconnected. Please reconnect.';
+    document.getElementById('status').innerHTML = `
+        <div style="color: #ff4757; font-weight: bold;">⚠ Controller disconnected</div>
+        <div style="font-size: 14px; margin-top: 5px;">Please reconnect your controller</div>
+    `;
+    showInstrumentFeedback('⚠ Controller Disconnected', 2000);
     gamepad = null;
 });
