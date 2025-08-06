@@ -69,7 +69,7 @@
 </head>
 <body>
     <h1>Gamepad Instrument</h1>
-    <div id="status">Connect an Xbox controller and press any button to start.</div>
+    <div id="status">Checking for controllers...</div>
     <div id="mode-display">Mode: Drum</div>
     <div id="chord-display"></div>
     <div id="recording-status"></div>
@@ -77,6 +77,11 @@
     <div id="controls">
         <button id="start-audio">Start Audio</button>
         <button id="download-loop" disabled>Download Loop</button>
+        <button id="debug-toggle">Toggle Debug</button>
+    </div>
+    
+    <div id="debug-info" style="display: none; margin-top: 20px; padding: 15px; background-color: #f5f5f5; border-radius: 5px; font-family: monospace; font-size: 12px;">
+        <div id="debug-content"></div>
     </div>
 
     <script src="deepseek_javascript_20250806_8b2738.js"></script>

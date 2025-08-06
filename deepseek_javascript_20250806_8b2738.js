@@ -20,6 +20,9 @@ document.getElementById('start-audio').addEventListener('click', async () => {
     console.log('Audio is ready');
     initAudio();
     document.getElementById('start-audio').disabled = true;
+    
+    // Start gamepad polling after audio is initialized
+    startGamepadPolling();
 });
 
 // Download loop button
@@ -33,6 +36,14 @@ document.getElementById('download-loop').addEventListener('click', () => {
         const blob = new Blob([JSON.stringify(loopData, null, 2)], {type: 'application/json'});
         saveAs(blob, `loop-${new Date().getTime()}.json`);
     }
+});
+
+// Debug toggle
+let debugMode = false;
+document.getElementById('debug-toggle').addEventListener('click', () => {
+    debugMode = !debugMode;
+    const debugDiv = document.getElementById('debug-info');
+    debugDiv.style.display = debugMode ? 'block' : 'none';
 });
 
 function initAudio() {
@@ -73,13 +84,62 @@ function initAudio() {
 }
 
 // Gamepad polling
-function pollGamepad() {
+let isPolling = false;
+
+function startGamepadPolling() {
+    if (!isPolling) {
+        isPolling = true;
+        checkForGamepad();
+    }
+}
+
+function checkForGamepad() {
+    if (!isPolling) return;
+    
     const gamepads = navigator.getGamepads();
-    if (gamepads[0]) {
-        gamepad = gamepads[0];
+    let foundGamepad = null;
+    
+    // Check all gamepad slots
+    for (let i = 0; i < gamepads.length; i++) {
+        if (gamepads[i]) {
+            foundGamepad = gamepads[i];
+            break;
+        }
     }
     
-    if (!gamepad) return;
+    if (foundGamepad && !gamepad) {
+        // New gamepad detected
+        gamepad = foundGamepad;
+        document.getElementById('status').textContent = `Gamepad connected: ${gamepad.id}`;
+        console.log('Gamepad detected:', gamepad.id);
+    } else if (!foundGamepad && gamepad) {
+        // Gamepad disconnected
+        gamepad = null;
+        document.getElementById('status').textContent = 'Gamepad disconnected. Please reconnect and press any button.';
+        console.log('Gamepad disconnected');
+    } else if (foundGamepad) {
+        // Update gamepad reference (important for getting current state)
+        gamepad = foundGamepad;
+    }
+    
+    if (gamepad) {
+        pollGamepad();
+    } else {
+        // Continue checking for gamepad if none found
+        requestAnimationFrame(checkForGamepad);
+    }
+}
+
+function pollGamepad() {
+    if (!gamepad || !isPolling) {
+        requestAnimationFrame(checkForGamepad);
+        return;
+    }
+    
+    // Update debug info if enabled
+    if (debugMode) {
+        updateDebugInfo();
+    }
     
     checkModeSwitch();
     
@@ -92,12 +152,38 @@ function pollGamepad() {
     handlePitchModulation();
     handleLoopRecording();
     
-    requestAnimationFrame(pollGamepad);
+    requestAnimationFrame(checkForGamepad);
+}
+
+function updateDebugInfo() {
+    if (!gamepad) return;
+    
+    let debugText = `<strong>Gamepad: ${gamepad.id}</strong><br>`;
+    debugText += `Connected: ${gamepad.connected}<br>`;
+    debugText += `Timestamp: ${gamepad.timestamp}<br><br>`;
+    
+    debugText += `<strong>Buttons:</strong><br>`;
+    for (let i = 0; i < gamepad.buttons.length; i++) {
+        const button = gamepad.buttons[i];
+        if (button.pressed || button.value > 0) {
+            debugText += `Button ${i}: pressed=${button.pressed}, value=${button.value.toFixed(3)}<br>`;
+        }
+    }
+    
+    debugText += `<br><strong>Axes:</strong><br>`;
+    for (let i = 0; i < gamepad.axes.length; i++) {
+        const axis = gamepad.axes[i];
+        if (Math.abs(axis) > 0.1) {
+            debugText += `Axis ${i}: ${axis.toFixed(3)}<br>`;
+        }
+    }
+    
+    document.getElementById('debug-content').innerHTML = debugText;
 }
 
 function checkModeSwitch() {
     // Start button (button 9) toggles mode
-    if (gamepad.buttons[9].pressed) {
+    if (gamepad.buttons[9] && gamepad.buttons[9].pressed) {
         isDrumMode = !isDrumMode;
         document.getElementById('mode-display').textContent = `Mode: ${isDrumMode ? 'Drum' : 'Chord'}`;
         document.getElementById('chord-display').textContent = '';
@@ -108,13 +194,13 @@ function checkModeSwitch() {
 
 function handleDrumMode() {
     // Left bumper (button 4) - kick
-    if (gamepad.buttons[4].pressed) {
+    if (gamepad.buttons[4] && gamepad.buttons[4].pressed) {
         drumPlayers.player('kick').start();
         recordEvent('drum', { sound: 'kick' });
     }
     
     // Right bumper (button 5) - snare
-    if (gamepad.buttons[5].pressed) {
+    if (gamepad.buttons[5] && gamepad.buttons[5].pressed) {
         drumPlayers.player('snare').start();
         recordEvent('drum', { sound: 'snare' });
     }
@@ -276,12 +362,68 @@ function recordEvent(type, data) {
 
 // Gamepad connection handling
 window.addEventListener("gamepadconnected", (e) => {
-    gamepad = e.gamepad;
-    document.getElementById('status').textContent = `Gamepad connected: ${gamepad.id}`;
-    requestAnimationFrame(pollGamepad);
+    console.log('Gamepadconnected event fired:', e.gamepad.id);
+    // The polling loop will pick this up automatically
 });
 
 window.addEventListener("gamepaddisconnected", (e) => {
-    document.getElementById('status').textContent = 'Gamepad disconnected. Please reconnect.';
-    gamepad = null;
+    console.log('Gamepaddisconnected event fired:', e.gamepad.id);
+    // The polling loop will handle disconnection
+});
+
+// Add manual detection button and improved status
+function updateGamepadStatus() {
+    const gamepads = navigator.getGamepads();
+    let connectedCount = 0;
+    let gamepadInfo = [];
+    
+    for (let i = 0; i < gamepads.length; i++) {
+        if (gamepads[i]) {
+            connectedCount++;
+            gamepadInfo.push(`Slot ${i}: ${gamepads[i].id}`);
+        }
+    }
+    
+    if (connectedCount === 0) {
+        document.getElementById('status').innerHTML = `
+            No gamepads detected. <br>
+            <small>Make sure your controller is connected and press any button on it.</small><br>
+            <button onclick="startGamepadPolling()" style="margin-top: 10px; padding: 5px 10px; font-size: 14px;">Check for Controllers</button>
+        `;
+    } else {
+        document.getElementById('status').innerHTML = `
+            ${connectedCount} gamepad(s) detected:<br>
+            <small>${gamepadInfo.join('<br>')}</small>
+        `;
+    }
+}
+
+// Initialize gamepad status check
+document.addEventListener('DOMContentLoaded', () => {
+    // Check for gamepad API support
+    if (!navigator.getGamepads) {
+        document.getElementById('status').innerHTML = `
+            <span style="color: red;">❌ Gamepad API not supported in this browser.</span><br>
+            <small>Please use Chrome, Firefox, or Edge for gamepad support.</small>
+        `;
+        return;
+    }
+    
+    // Check for HTTPS (required for some gamepad features)
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+        document.getElementById('status').innerHTML = `
+            <span style="color: orange;">⚠️ HTTPS recommended for better gamepad support.</span><br>
+            <small>Some browsers require HTTPS for full gamepad functionality.</small><br>
+            <button onclick="startGamepadPolling()" style="margin-top: 10px; padding: 5px 10px; font-size: 14px;">Try Anyway</button>
+        `;
+    }
+    
+    updateGamepadStatus();
+    
+    // Check periodically for gamepads even before audio is started
+    setInterval(() => {
+        if (!isPolling) {
+            updateGamepadStatus();
+        }
+    }, 2000);
 });
