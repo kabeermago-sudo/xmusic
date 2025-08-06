@@ -3,80 +3,324 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gamepad Instrument</title>
+    <title>🎮 Gamepad Instrument Studio</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
             padding: 20px;
-            background-color: #f0f0f0;
-            color: #333;
         }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            align-items: start;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            grid-column: 1 / -1;
+        }
+
+        .main-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .controller-guide {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
         #status {
-            padding: 10px;
+            padding: 15px;
             margin-bottom: 20px;
-            border-radius: 5px;
-            background-color: #e0e0e0;
+            border-radius: 15px;
+            background: rgba(255, 255, 255, 0.2);
+            text-align: center;
+            font-weight: 500;
         }
+
         #mode-display {
             font-size: 24px;
             font-weight: bold;
-            margin: 10px 0;
-            padding: 10px;
-            background-color: #ddd;
-            border-radius: 5px;
+            margin: 15px 0;
+            padding: 15px;
+            background: #ff6b6b;
+            border-radius: 15px;
+            text-align: center;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
+
         #chord-display {
-            font-size: 20px;
-            margin: 10px 0;
-            padding: 10px;
-            background-color: #eee;
-            border-radius: 5px;
-            min-height: 30px;
+            font-size: 18px;
+            margin: 15px 0;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            min-height: 50px;
+            text-align: center;
+            transition: all 0.3s ease;
         }
+
         #recording-status {
             font-size: 18px;
-            color: #d00;
-            margin: 10px 0;
+            color: #ff4757;
+            margin: 15px 0;
+            text-align: center;
+            font-weight: bold;
         }
+
         button {
-            padding: 10px 15px;
-            margin: 5px;
-            background-color: #4CAF50;
+            padding: 12px 20px;
+            margin: 8px;
+            background: linear-gradient(135deg, #4CAF50, #45a049);
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 10px;
             cursor: pointer;
             font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
+
         button:hover {
-            background-color: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
         }
+
+        button:disabled {
+            background: #888;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         #controls {
             margin-top: 20px;
-            padding: 15px;
-            background-color: #ddd;
-            border-radius: 5px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            text-align: center;
         }
-        .axis-value {
+
+        .controller-layout {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .controller-section {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .controller-section h3 {
+            color: #ffd700;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .button-mapping {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 8px 12px;
+            margin: 5px 0;
+            border-radius: 8px;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .button-name {
+            font-weight: bold;
+            color: #ffd700;
+        }
+
+        .mode-indicator {
             display: inline-block;
-            width: 100px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-left: 10px;
+        }
+
+        .drum-mode { background-color: #ff6b6b; }
+        .chord-mode { background-color: #4ecdc4; }
+
+        .guide-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            text-align: center;
+            color: #ffd700;
+        }
+
+        .instructions {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .instructions h4 {
+            color: #ffd700;
+            margin-bottom: 8px;
+        }
+
+        .instructions p {
+            font-size: 14px;
+            line-height: 1.4;
         }
     </style>
 </head>
 <body>
-    <h1>Gamepad Instrument</h1>
-    <div id="status">Connect an Xbox controller and press any button to start.</div>
-    <div id="mode-display">Mode: Drum</div>
-    <div id="chord-display"></div>
-    <div id="recording-status"></div>
-    
-    <div id="controls">
-        <button id="start-audio">Start Audio</button>
-        <button id="download-loop" disabled>Download Loop</button>
+    <div class="container">
+        <h1>🎮 Gamepad Instrument Studio</h1>
+        
+        <div class="main-panel">
+            <div id="status">Connect an Xbox controller and press any button to start.</div>
+            <div id="mode-display">Mode: Drum Kit <span class="mode-indicator drum-mode"></span></div>
+            <div id="chord-display">Press buttons to play instruments!</div>
+            <div id="recording-status"></div>
+            
+            <div id="controls">
+                <button id="start-audio">🎵 Start Audio</button>
+                <button id="download-loop" disabled>💾 Download Loop</button>
+            </div>
+
+            <div class="instructions">
+                <h4>🎯 Quick Start:</h4>
+                <p><strong>1.</strong> Connect Xbox controller<br>
+                <strong>2.</strong> Click "Start Audio"<br>
+                <strong>3.</strong> Press controller buttons to play<br>
+                <strong>4.</strong> Use START button to switch modes</p>
+            </div>
+        </div>
+
+        <div class="controller-guide">
+            <div class="guide-title">🎮 Controller Layout</div>
+            
+            <div class="controller-layout">
+                <div class="controller-section">
+                    <h3>🥁 Drum Mode</h3>
+                    <div class="button-mapping">
+                        <span class="button-name">LB</span>
+                        <span>Kick Drum</span>
+                    </div>
+                    <div class="button-mapping">
+                        <span class="button-name">RB</span>
+                        <span>Snare</span>
+                    </div>
+                    <div class="button-mapping">
+                        <span class="button-name">A</span>
+                        <span>Hi-Hat</span>
+                    </div>
+                    <div class="button-mapping">
+                        <span class="button-name">B</span>
+                        <span>Crash</span>
+                    </div>
+                </div>
+
+                <div class="controller-section">
+                    <h3>🎹 Chord Mode</h3>
+                    <div class="button-mapping">
+                        <span class="button-name">D-Pad ↓</span>
+                        <span>C (I)</span>
+                    </div>
+                    <div class="button-mapping">
+                        <span class="button-name">D-Pad ←</span>
+                        <span>D (ii)</span>
+                    </div>
+                    <div class="button-mapping">
+                        <span class="button-name">D-Pad ↑</span>
+                        <span>E (iii)</span>
+                    </div>
+                    <div class="button-mapping">
+                        <span class="button-name">D-Pad →</span>
+                        <span>F (IV)</span>
+                    </div>
+                    <div class="button-mapping">
+                        <span class="button-name">A</span>
+                        <span>G (V)</span>
+                    </div>
+                    <div class="button-mapping">
+                        <span class="button-name">B</span>
+                        <span>A (vi)</span>
+                    </div>
+                </div>
+
+                <div class="controller-section">
+                    <h3>🎛️ Modifiers</h3>
+                    <div class="button-mapping">
+                        <span class="button-name">LB</span>
+                        <span>Major 7</span>
+                    </div>
+                    <div class="button-mapping">
+                        <span class="button-name">RB</span>
+                        <span>Minor 7</span>
+                    </div>
+                    <div class="button-mapping">
+                        <span class="button-name">LT</span>
+                        <span>Suspended</span>
+                    </div>
+                    <div class="button-mapping">
+                        <span class="button-name">RT</span>
+                        <span>Diminished</span>
+                    </div>
+                    <div class="button-mapping">
+                        <span class="button-name">START</span>
+                        <span>Switch Mode</span>
+                    </div>
+                    <div class="button-mapping">
+                        <span class="button-name">BACK</span>
+                        <span>Record/Stop</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="instructions">
+                <h4>🎵 Pro Tips:</h4>
+                <p><strong>Chord Mode:</strong> Hold modifier buttons (LB/RB/LT/RT) while pressing chord buttons for different qualities<br>
+                <strong>Recording:</strong> Press BACK to start/stop loop recording<br>
+                <strong>Pitch Bend:</strong> Use right analog stick for pitch modulation</p>
+            </div>
+        </div>
     </div>
 
     <script src="deepseek_javascript_20250806_8b2738.js"></script>
