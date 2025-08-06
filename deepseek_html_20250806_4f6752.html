@@ -37,6 +37,81 @@
             border-radius: 5px;
             min-height: 30px;
         }
+        
+        #instrument-display {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #f8f8f8;
+            border-radius: 10px;
+            border: 2px solid #ddd;
+        }
+        
+        .drum-kit, .chord-pad {
+            text-align: center;
+        }
+        
+        .instrument-button {
+            display: inline-block;
+            margin: 5px;
+            padding: 15px 20px;
+            background-color: #e0e0e0;
+            border: 3px solid #ccc;
+            border-radius: 10px;
+            font-weight: bold;
+            transition: all 0.1s ease;
+            cursor: default;
+            min-width: 80px;
+            font-size: 14px;
+        }
+        
+        .instrument-button.active {
+            background-color: #4CAF50;
+            color: white;
+            border-color: #45a049;
+            transform: scale(1.1);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .drum-button {
+            background-color: #ff6b6b;
+            color: white;
+        }
+        
+        .drum-button.active {
+            background-color: #ff5252;
+            transform: scale(1.2);
+        }
+        
+        .chord-button {
+            background-color: #4ecdc4;
+            color: white;
+        }
+        
+        .chord-button.active {
+            background-color: #26a69a;
+            transform: scale(1.1);
+        }
+        
+        .controller-guide {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f0f8ff;
+            border-radius: 10px;
+            border: 2px solid #b3d9ff;
+        }
+        
+        .guide-section {
+            margin: 10px 0;
+        }
+        
+        .guide-title {
+            font-weight: bold;
+            color: #2c5282;
+            margin-bottom: 5px;
+        }
         #recording-status {
             font-size: 18px;
             color: #d00;
@@ -68,11 +143,58 @@
     </style>
 </head>
 <body>
-    <h1>Gamepad Instrument</h1>
+    <h1>🎮 Gamepad Instrument</h1>
     <div id="status">Checking for controllers...</div>
     <div id="mode-display">Mode: Drum</div>
     <div id="chord-display"></div>
     <div id="recording-status"></div>
+    
+    <div id="instrument-display">
+        <div class="drum-kit">
+            <h3>🥁 Drum Kit</h3>
+            <div class="instrument-button drum-button" id="kick-drum">
+                Kick<br><small>L1 Button</small>
+            </div>
+            <div class="instrument-button drum-button" id="snare-drum">
+                Snare<br><small>R1 Button</small>
+            </div>
+        </div>
+        
+        <div class="chord-pad">
+            <h3>🎹 Chord Pad</h3>
+            <div style="margin-bottom: 10px;">
+                <div class="instrument-button chord-button" id="chord-I">I<br><small>D-Down</small></div>
+                <div class="instrument-button chord-button" id="chord-ii">ii<br><small>D-Left</small></div>
+                <div class="instrument-button chord-button" id="chord-iii">iii<br><small>D-Up</small></div>
+                <div class="instrument-button chord-button" id="chord-IV">IV<br><small>D-Right</small></div>
+            </div>
+            <div>
+                <div class="instrument-button chord-button" id="chord-V">V<br><small>A Button</small></div>
+                <div class="instrument-button chord-button" id="chord-vi">vi<br><small>B Button</small></div>
+                <div class="instrument-button chord-button" id="chord-vii">vii°<br><small>X Button</small></div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="controller-guide">
+        <div class="guide-title">🎮 Controller Guide</div>
+        <div class="guide-section">
+            <strong>Mode Switch:</strong> Start Button (toggles Drum/Chord mode)
+        </div>
+        <div class="guide-section" id="drum-guide">
+            <strong>Drum Mode:</strong> L1 = Kick, R1 = Snare
+        </div>
+        <div class="guide-section" id="chord-guide" style="display: none;">
+            <strong>Chord Mode:</strong><br>
+            • D-Pad & Face Buttons = Root Notes<br>
+            • L1 = Major 7, R1 = Minor 7<br>
+            • L2 = Suspended, R2 = Diminished<br>
+            • Right Stick = Pitch Bend
+        </div>
+        <div class="guide-section">
+            <strong>Recording:</strong> Back/Select Button (toggles loop recording)
+        </div>
+    </div>
     
     <div id="controls">
         <button id="start-audio">Start Audio</button>

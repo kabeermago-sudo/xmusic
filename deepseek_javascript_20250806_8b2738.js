@@ -7,6 +7,10 @@ let loopEvents = [];
 let currentChord = '';
 let currentDetune = 0;
 
+// Button state tracking for debouncing
+let lastButtonStates = {};
+let visualTimeouts = {};
+
 // Audio elements
 let drumPlayers;
 let synth;
@@ -16,13 +20,22 @@ let recordedBuffer;
 
 // Initialize audio context on user interaction
 document.getElementById('start-audio').addEventListener('click', async () => {
-    await Tone.start();
-    console.log('Audio is ready');
-    initAudio();
-    document.getElementById('start-audio').disabled = true;
-    
-    // Start gamepad polling after audio is initialized
-    startGamepadPolling();
+    try {
+        await Tone.start();
+        console.log('Audio context started');
+        await initAudio();
+        document.getElementById('start-audio').disabled = true;
+        
+        // Start gamepad polling after audio is initialized
+        startGamepadPolling();
+        
+        // Initialize mode display
+        updateModeDisplay();
+        
+    } catch (error) {
+        console.error('Error starting audio:', error);
+        document.getElementById('status').textContent = 'Error starting audio. Please try again.';
+    }
 });
 
 // Download loop button
@@ -46,41 +59,58 @@ document.getElementById('debug-toggle').addEventListener('click', () => {
     debugDiv.style.display = debugMode ? 'block' : 'none';
 });
 
-function initAudio() {
-    // Drum samples
-    drumPlayers = new Tone.Players({
-        kick: "https://tonejs.github.io/audio/drum-samples/lo-fi/kick.mp3",
-        snare: "https://tonejs.github.io/audio/drum-samples/lo-fi/snare.mp3"
-    }).toDestination();
-    
-    // Synth for chord mode
-    synth = new Tone.PolySynth(Tone.Synth, {
-        oscillator: {
-            type: "sawtooth"
-        },
-        envelope: {
-            attack: 0.02,
-            decay: 0.1,
-            sustain: 0.3,
-            release: 0.5
-        }
-    }).toDestination();
-    
-    // Create a recorder
-    recorder = new Tone.Recorder();
-    synth.connect(recorder);
-    drumPlayers.connect(recorder);
-    
-    // Initialize loop part (empty at first)
-    loopPart = new Tone.Part((time, event) => {
-        if (event.type === 'drum') {
-            drumPlayers.player(event.sound).start(time);
-        } else if (event.type === 'chord') {
-            synth.triggerAttackRelease(event.notes, event.duration, time, event.velocity);
-        }
-    }, []).start(0);
-    loopPart.loop = true;
-    loopPart.loopEnd = '4m';
+async function initAudio() {
+    try {
+        document.getElementById('status').textContent = 'Loading audio samples...';
+        
+        // Drum samples
+        drumPlayers = new Tone.Players({
+            kick: "https://tonejs.github.io/audio/drum-samples/lo-fi/kick.mp3",
+            snare: "https://tonejs.github.io/audio/drum-samples/lo-fi/snare.mp3"
+        }).toDestination();
+        
+        // Wait for drum samples to load
+        await Tone.loaded();
+        
+        // Synth for chord mode
+        synth = new Tone.PolySynth(Tone.Synth, {
+            oscillator: {
+                type: "sawtooth"
+            },
+            envelope: {
+                attack: 0.02,
+                decay: 0.1,
+                sustain: 0.3,
+                release: 0.5
+            }
+        }).toDestination();
+        
+        // Create a recorder
+        recorder = new Tone.Recorder();
+        synth.connect(recorder);
+        drumPlayers.connect(recorder);
+        
+        // Initialize loop part (empty at first)
+        loopPart = new Tone.Part((time, event) => {
+            if (event.type === 'drum') {
+                if (drumPlayers.loaded) {
+                    drumPlayers.player(event.sound).start(time);
+                }
+            } else if (event.type === 'chord') {
+                synth.triggerAttackRelease(event.notes, event.duration, time, event.velocity);
+            }
+        }, []).start(0);
+        loopPart.loop = true;
+        loopPart.loopEnd = '4m';
+        
+        // Update status
+        updateGamepadStatus();
+        console.log('Audio initialized successfully');
+        
+    } catch (error) {
+        console.error('Error initializing audio:', error);
+        document.getElementById('status').textContent = 'Error loading audio. Please try again.';
+    }
 }
 
 // Gamepad polling
@@ -183,91 +213,122 @@ function updateDebugInfo() {
 
 function checkModeSwitch() {
     // Start button (button 9) toggles mode
-    if (gamepad.buttons[9] && gamepad.buttons[9].pressed) {
+    if (gamepad.buttons[9] && gamepad.buttons[9].pressed && !lastButtonStates[9]) {
         isDrumMode = !isDrumMode;
         document.getElementById('mode-display').textContent = `Mode: ${isDrumMode ? 'Drum' : 'Chord'}`;
         document.getElementById('chord-display').textContent = '';
-        // Debounce
-        setTimeout(() => {}, 200);
+        
+        // Update UI visibility
+        updateModeDisplay();
+    }
+    lastButtonStates[9] = gamepad.buttons[9] && gamepad.buttons[9].pressed;
+}
+
+function updateModeDisplay() {
+    const drumGuide = document.getElementById('drum-guide');
+    const chordGuide = document.getElementById('chord-guide');
+    
+    if (isDrumMode) {
+        drumGuide.style.display = 'block';
+        chordGuide.style.display = 'none';
+    } else {
+        drumGuide.style.display = 'none';
+        chordGuide.style.display = 'block';
     }
 }
 
 function handleDrumMode() {
     // Left bumper (button 4) - kick
-    if (gamepad.buttons[4] && gamepad.buttons[4].pressed) {
-        drumPlayers.player('kick').start();
-        recordEvent('drum', { sound: 'kick' });
+    if (gamepad.buttons[4] && gamepad.buttons[4].pressed && !lastButtonStates[4]) {
+        if (drumPlayers && drumPlayers.loaded) {
+            drumPlayers.player('kick').start();
+            recordEvent('drum', { sound: 'kick' });
+            showVisualFeedback('kick-drum', 200);
+        }
     }
+    lastButtonStates[4] = gamepad.buttons[4] && gamepad.buttons[4].pressed;
     
     // Right bumper (button 5) - snare
-    if (gamepad.buttons[5] && gamepad.buttons[5].pressed) {
-        drumPlayers.player('snare').start();
-        recordEvent('drum', { sound: 'snare' });
+    if (gamepad.buttons[5] && gamepad.buttons[5].pressed && !lastButtonStates[5]) {
+        if (drumPlayers && drumPlayers.loaded) {
+            drumPlayers.player('snare').start();
+            recordEvent('drum', { sound: 'snare' });
+            showVisualFeedback('snare-drum', 200);
+        }
     }
+    lastButtonStates[5] = gamepad.buttons[5] && gamepad.buttons[5].pressed;
+}
+
+function showVisualFeedback(elementId, duration = 150) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    
+    // Clear existing timeout
+    if (visualTimeouts[elementId]) {
+        clearTimeout(visualTimeouts[elementId]);
+    }
+    
+    // Add active class
+    element.classList.add('active');
+    
+    // Remove active class after duration
+    visualTimeouts[elementId] = setTimeout(() => {
+        element.classList.remove('active');
+        delete visualTimeouts[elementId];
+    }, duration);
 }
 
 function handleChordMode() {
-    // Determine chord quality based on bumpers and triggers
-    let chordQuality = '';
-    let chordName = '';
+    // Check each chord button for presses
+    const chordButtons = [
+        { button: 13, elementId: 'chord-I', root: 'C', function: 'I' },    // D-Pad Down
+        { button: 14, elementId: 'chord-ii', root: 'D', function: 'ii' },  // D-Pad Left
+        { button: 12, elementId: 'chord-iii', root: 'E', function: 'iii' }, // D-Pad Up
+        { button: 15, elementId: 'chord-IV', root: 'F', function: 'IV' },   // D-Pad Right
+        { button: 0, elementId: 'chord-V', root: 'G', function: 'V' },      // A button
+        { button: 1, elementId: 'chord-vi', root: 'A', function: 'vi' },    // B button
+        { button: 2, elementId: 'chord-vii', root: 'B', function: 'vii°' }  // X button
+    ];
     
-    if (gamepad.buttons[4].pressed) { // Left bumper - Major 7
+    // Determine chord quality based on bumpers and triggers
+    let chordQuality = 'maj'; // Default to major
+    let chordName = 'Major';
+    
+    if (gamepad.buttons[4] && gamepad.buttons[4].pressed) { // Left bumper - Major 7
         chordQuality = 'maj7';
         chordName = 'Major 7';
-    } else if (gamepad.buttons[5].pressed) { // Right bumper - Minor 7
+    } else if (gamepad.buttons[5] && gamepad.buttons[5].pressed) { // Right bumper - Minor 7
         chordQuality = 'min7';
         chordName = 'Minor 7';
-    } else if (gamepad.buttons[6].value > 0.5) { // Left trigger - Suspended
+    } else if (gamepad.buttons[6] && gamepad.buttons[6].value > 0.5) { // Left trigger - Suspended
         chordQuality = 'sus4';
         chordName = 'Suspended';
-    } else if (gamepad.buttons[7].value > 0.5) { // Right trigger - Diminished
+    } else if (gamepad.buttons[7] && gamepad.buttons[7].value > 0.5) { // Right trigger - Diminished
         chordQuality = 'dim';
         chordName = 'Diminished';
-    } else {
-        chordQuality = 'maj'; // Default to major
-        chordName = 'Major';
     }
     
-    // Determine root note based on D-Pad and A/B/X/Y buttons
-    let rootNote = '';
-    let chordFunction = '';
-    
-    if (gamepad.buttons[13].pressed) { // D-Pad Down - I
-        rootNote = 'C';
-        chordFunction = 'I';
-    } else if (gamepad.buttons[14].pressed) { // D-Pad Left - ii
-        rootNote = 'D';
-        chordFunction = 'ii';
-    } else if (gamepad.buttons[12].pressed) { // D-Pad Up - iii
-        rootNote = 'E';
-        chordFunction = 'iii';
-    } else if (gamepad.buttons[15].pressed) { // D-Pad Right - IV
-        rootNote = 'F';
-        chordFunction = 'IV';
-    } else if (gamepad.buttons[0].pressed) { // A - V
-        rootNote = 'G';
-        chordFunction = 'V';
-    } else if (gamepad.buttons[1].pressed) { // B - vi
-        rootNote = 'A';
-        chordFunction = 'vi';
-    } else if (gamepad.buttons[2].pressed) { // X - vii°
-        rootNote = 'B';
-        chordFunction = 'vii°';
-    }
-    
-    if (rootNote) {
-        const chordNotes = getChordNotes(rootNote, chordQuality);
-        synth.triggerAttackRelease(chordNotes, '8n');
-        
-        currentChord = `${chordFunction} (${chordName})`;
-        document.getElementById('chord-display').textContent = currentChord;
-        
-        recordEvent('chord', {
-            notes: chordNotes,
-            duration: '8n',
-            velocity: 0.8,
-            chord: currentChord
-        });
+    // Check each chord button
+    for (const chord of chordButtons) {
+        if (gamepad.buttons[chord.button] && gamepad.buttons[chord.button].pressed && !lastButtonStates[chord.button]) {
+            if (synth) {
+                const chordNotes = getChordNotes(chord.root, chordQuality);
+                synth.triggerAttackRelease(chordNotes, '8n');
+                
+                currentChord = `${chord.function} (${chordName})`;
+                document.getElementById('chord-display').textContent = currentChord;
+                
+                showVisualFeedback(chord.elementId, 300);
+                
+                recordEvent('chord', {
+                    notes: chordNotes,
+                    duration: '8n',
+                    velocity: 0.8,
+                    chord: currentChord
+                });
+            }
+        }
+        lastButtonStates[chord.button] = gamepad.buttons[chord.button] && gamepad.buttons[chord.button].pressed;
     }
 }
 
@@ -311,15 +372,14 @@ function handlePitchModulation() {
 
 function handleLoopRecording() {
     // Back button (button 8) toggles recording
-    if (gamepad.buttons[8].pressed) {
+    if (gamepad.buttons[8] && gamepad.buttons[8].pressed && !lastButtonStates[8]) {
         if (!isRecording) {
             startRecording();
         } else {
             stopRecording();
         }
-        // Debounce
-        setTimeout(() => {}, 200);
     }
+    lastButtonStates[8] = gamepad.buttons[8] && gamepad.buttons[8].pressed;
 }
 
 function startRecording() {
